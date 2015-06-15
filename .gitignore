@@ -1,9 +1,11 @@
-.DS_Store
 .yardoc
-cert_data/test_ca/crl_number.txt
+crl_number.txt
+list.txt
 coverage
 doc
-*.gem
 config.yaml
 log
 Gemfile.lock
+*.cer
+*.key
+*.gem

@@ -1,132 +1,311 @@
-#r509-ca-http [![Build Status](https://secure.travis-ci.org/r509/r509-ca-http.png)](http://travis-ci.org/r509/r509-ca-http) [![Coverage Status](https://coveralls.io/repos/r509/r509-ca-http/badge.png)](https://coveralls.io/r/r509/r509-ca-http)
+# r509-ca-http
 
-r509-ca-http is an HTTP server that runs a certificate authority, for signing SSL certificates. It supports issuance and revocation, and is intended to be part of a complete certificate authority for use in production environments.
+r509-ca-http is an HTTP server that runs a certificate authority, for
+signing SSL certificates. It is intended to be part of a complete
+certificate authority for use in production environments.
 
-##Requirements/Installation
+## Requirements/Installation
 
-You need [r509](https://github.com/r509/r509) and sinatra. For development/tests you need rack-test and rspec.
+```
+$ sudo gem install rspec
+$ sudo gem install yard
+$ sudo gem install thin
+$ sudo gem install rack
+$ sudo gem install sinatra
+$ sudo gem install dependo
+```
 
-## API
+You have also to install the r509 library customized
 
-### GET /1/crl/:ca/get
+## Configuration
 
-Deprecated; will be removed in a future version. Use generate instead.
+For your CA, you have to generate the certificate `root.cer` and the
+private key `root.key`:
 
+```
+$ r509.rb --out root.cer --keyout root.key
+CSR Bit Length (2048):
+Message Digest (SHA1): SHA256
+C (US): IT
+ST (null by default):
+L (null by default):
+O (r509 LLC): CA ORGANIZATION.
+OU (null by default): A
+CN: Private CA
+SAN Domains (comma separated):
+Self-signed cert duration in days (null disables self-sign): 3650
+/C=IT/ST=Turin/L=Turin/O=MyCompany.
+/OU=Private Environment/CN=Private Company
+```
 
-### GET /1/crl/:ca/generate
+You have to initialize the revocation list support regardless you won't
+use it:
 
-Generate and get a new CRL for the given ```:ca```.
-
-### POST /1/certificate/issue
-
-Issue a certificate.
-
-Required POST parameters:
-
-- ca
-- profile
-- validityPeriod (in seconds)
-- csr (or spki)
-- subject
-
-The subject is provided like so:
-
-    subject[CN]=domain.com&subject[O]=orgname&subject[L]=locality
-
-Optional POST parameters:
-
-- extensions[subjectAlternativeName]
-- message\_digest
-
-SAN names are provided like so:
-
-    extensions[subjectAlternativeName][]=domain1.com&extensions[subjectAlternativeName][]=domain2.com
-
-The issue method will return the PEM text of the issued certificate.
-
-Please note that all fields subject/extension request fields encoded in a CSR are ignored in favor of the POST parameters.
-
-### POST /1/certificate/revoke
-
-Revoke a certificate.
-
-Required POST parameters:
-
-- ca
-- serial
-
-Optional POST parameters:
-
-- reason (must be an integer or nil. nil by default)
-
-The revoke method returns the newly generated CRL, after revocation.
-
-### POST /1/certificate/unrevoke
-
-Unrevoke a certificate. (IE, remove it from the CRL and return its OCSP status to valid.)
-
-Required POST parameters:
-
-- ca
-- serial
-
-The unrevoke method returns the newly generated CRL, after the certificate was removed from it.
-
-## Helper pages
-
-These pages are present on the server, for you to work with the CA with a basic web interface. You should _not_ expose these endpoints to anyone.
-
-- /test/certificate/issue
-
-- /test/certificate/revoke
-
-- /test/certificate/unrevoke
+```
+$ touch crlnumber.txt list.txt
+```
 
 ## certificate\_authorities (config.yaml)
 
-You use the ```config.yaml``` file to specify information about your certificate authority. You can operate multiple certificate authorities, each of which can have multiple profiles, with one instance of r509-ca-http.
+You use the `config.yaml` file to specify information about your
+certificate authority. You have to configure `tilab` CA that can
+have multiple profiles, with one instance of r509-ca-http.
 
-Information about how to construct the YAML can be found at [the official r509 documentation](https://github.com/r509/r509).
+Information about how to construct the YAML can be found at [the
+official r509 documentation](https://github.com/r509/r509).
+
+```
+$ ca-config.rb --cert root.cer --key root.key --config config.yaml
+```
 
 ## Middleware (config.ru)
 
-Running r509-ca-http will let you issue and revoke certificates. But that's not everything you need to do, if you're going to run a CA. You're going to need information about validity, and you may want to save a record of issued certificates to the filesystem.
+The `config.ru` file configures sinatra and we can run the application locally
+using the rackup command.
 
-For that, we've created a few pieces of Rack middleware for your use.
+## Signals
 
-- [r509-middleware-validity](https://github.com/r509/r509-middleware-validity)
-- [r509-middleware-certwriter](https://github.com/r509/r509-middleware-certwriter)
-
-After installing one or both of them, you'll have to edit your ```config.ru``` and/or ```config.yaml``` files.
-
-##Signals
-
-You can send a kill -USR2 signal to any running r509-ca-http process to cause it to reload and print its config to the logs (provided your app server isn't trapping USR2 first).
-
-##Support
-
-You can file bugs on GitHub or join the #r509 channel on irc.freenode.net to ask questions.
+You can send a kill -USR2 signal to any running r509-ca-http process to
+cause it to reload and print its config to the logs (provided your app
+server isn't trapping USR2 first).
 
 ## Rake tasks
 
-There are a few things you can do with Rake.
+There are a few things you can do with Rake:
 
-```rake spec```
-
-Run all the tests.
-
-```rake gem:build```
+```
+rake gem:build
+```
 
 Build a gem file.
 
-```rake gem:install```
+```
+rake gem:install
+```
 
 Install the gem you just built.
 
-```rake gem:uninstall```
+```
+rake gem:uninstall
+```
 
 Uninstall r509-ca-http.
 
-```rake yard```
+## Run
 
-Generate documentation.
+```
+$ sudo rackup -p 9292
+```
+
+## API
+
+### Get the CA certificate
+
+```
+$ curl -X GET http://127.0.0.1:9292/1/ca/cert
+```
+
+The response is the certificate (in PEM format).
+
+### Get the profiles
+
+```
+$ curl -X GET http://127.0.0.1:9292/1/ca/profiles
+```
+
+The response is the profile list in JSON format:
+
+```
+{ "items" : [ "client", "server", "email" ] }
+```
+
+### Generate a key pair
+
+```
+$ curl -X POST \
+> -d type=RSA \
+> -d bit_length=2048 \
+> http://127.0.0.1:9292/1/keypair
+```
+
+The key `type` parameter can be:
+
+- `RSA` (default)
+- `DSA`
+- `EC`
+
+The `bit_length` parameter is the size of the key (number of bit) for
+RSA or DSA key (default 2048).
+
+The `curve_name` parameter is the name of the curve for EC key (default
+`secp384r1`).
+
+The response is a JSON object with the following fields:
+
+- `privatekey`: The private key (in PEM format).
+- `publickey`: The public key (in PEM format).
+
+### Generate a certificate signing request (CSR)
+
+```
+$ curl -X POST \
+> -d subject[C]=IT \
+> -d subject[ST]=Turin \
+> -d subject[L]=Turin \
+> -d subject[O]=Private Company S.p.A \
+> -d subject[OU]=My Laboratory inside my company building
+> -d subject[CN]=frances-co
+> -d subject[emailAddress]=frances-co@mmail.it \
+> --data-urlencode public_key@publickey.pem \
+> http://127.0.0.1:9292/1/certificate/request
+```
+
+The `subject` parameters map the subject properties.
+
+The response is the CSR (in PEM format).
+
+### Sign a CSR
+
+```
+$ curl -X POST \
+> --data-urlencode csr@csr.pem \
+> --data-urlencode key@privatekey.pem \
+> http://127.0.0.1:9292/1/certificate/request/sign
+```
+
+The `csr` parameter is the CSR to sign (in PEM format).
+
+The `key` parameter is the private key of the subject (in PEM format).
+
+The response is the signed CSR (in PEM format).
+
+
+
+### Generate a signed CSR
+
+```
+$ curl -X POST \
+> -d subject[C]=IT \
+> -d subject[ST]=Turin \
+> -d subject[L]=Turin \
+> -d subject[O]=Private Company S.p.A \
+> -d subject[OU]=My Lab inside my company building \
+> -d subject[CN]=frances-co
+> -d subject[emailAddress]=frances.co@mmail.it \
+> --data-urlencode key@privatekey.pem \
+> http://127.0.0.1:9292/1/certificate/signedrequest
+```
+
+The `key` parameter is the private key of the subject (in PEM format).
+
+The other parameters match the parameters of the request
+`/1/certificate/request`.
+
+The response is the signed CSR (in PEM format).
+
+### Generate a key pair and a signed CSR
+
+```
+$ curl -X POST \
+> -d subject[C]=IT \
+> -d subject[ST]=Turin \
+> -d subject[L]=Turin \
+> -d subject[O]=Private Company S.p.A \
+> -d subject[OU]=My Lab inside my company building
+> -d subject[CN]=frances-co
+> -d subject[emailAddress]=frances.co@mmail.it \
+> -d newkey[type]=RSA \
+> -d newkey[bit_length]=2048 \
+> http://127.0.0.1:9292/1/certificate/signedrequest
+```
+
+The `newkey` parameters define the parameters for the key pair
+generation; the keys of the `newkey` hash match the parameters of the
+request `/1/keypair`.
+
+The other parameters match the parameters of the request
+`/1/certificate/request`.
+
+The response is a JSON object with the following fields:
+
+- `csr`: The signed CSR (in PEM format).
+- `privatekey`: The private key (in PEM format).
+- `publickey`: The public key (in PEM format).
+
+### Issue a certificate
+
+```
+$ curl -X POST \
+> -d profile=server \
+> --data-urlencoded csr@csr.pem \
+> -d validityPeriod=31536000 \
+> http://127.0.0.1:9292/1/certificate/issue
+```
+
+The `profile` parameter is the profile for the certificate issuing.
+
+The `csr` parameter is the signed CSR (in PEM format).
+
+The `validityPeriod` parameter is the validity period of the issued
+certificate (in seconds).
+
+The response is the certificate (in PEM format).
+
+### Generate a signed CSR and issue a certificate
+
+```
+$ curl -X POST \
+> -d profile=server \
+> -d subject[C]=IT \
+> -d subject[ST]=Turin \
+> -d subject[L]=Turin \
+> -d subject[O]=Private Company%20S.p.A \
+> -d subject[OU]=My Lab inside the company building \
+> -d subject[CN]=frances-co
+> -d subject[emailAddress]=frances-co@mmail.it \
+> --data-urlencode key@privatekey.pem \
+> -d validityPeriod=31536000 \
+> http://127.0.0.1:9292/1/certificate/issue
+```
+
+The `profile` parameter is the profile for the certificate issuing.
+
+The `subject` parameters map the subject properties.
+
+The `key` parameter is the private key of the subject (in PEM format).
+
+The `validityPeriod` parameter is the validity period of the issued
+certificate (in seconds).
+
+The response is the certificate (in PEM format).
+
+### Generate a key pair and issue a certificate
+
+```
+$ curl -X POST \
+> -d profile=server \
+> -d subject[C]=IT \
+> -d subject[ST]=Turin \
+> -d subject[L]=Turin \
+> -d subject[O]=Private Company S.p.A \
+> -d subject[OU]=My Lab inside the company building \
+> -d subject[CN]=frances-co
+> -d subject[emailAddress]=frances-co@mmail.it \
+> -d newkey[type]=RSA \
+> -d newkey[bit_length]=2048 \
+> -d validityPeriod=31536000 \
+> http://127.0.0.1:9292/1/certificate/issue
+```
+
+The `newkey` parameters define the parameters for the key pair
+generation; the keys of the `newkey` hash match the parameters of the
+request `/1/keypair`.
+
+The other parameters match the parameters of the request
+`/1/certificate/issue`.
+
+The response is a JSON object with the following fields:
+
+- `cert`: The certificate (in PEM format).
+- `privatekey`: The private key (in PEM format).
+- `publickey`: The public key (in PEM format).
